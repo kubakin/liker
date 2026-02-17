@@ -3,7 +3,7 @@ import { api } from './api';
 
 const VKID_OAUTH2_RESPONSE = 'oauth2_authorize_response';
 
-type Tab = 'keys' | 'targets' | 'job' | 'captcha';
+type Tab = 'keys' | 'targets' | 'job' | 'processed' | 'captcha';
 
 export default function App() {
   const [tab, setTab] = useState<Tab>('job');
@@ -43,7 +43,7 @@ export default function App() {
             Liker
           </h1>
           <nav className="flex gap-1">
-            {(['job', 'keys', 'targets', 'captcha'] as const).map((t) => (
+            {(['job', 'keys', 'targets', 'processed', 'captcha'] as const).map((t) => (
               <button
                 key={t}
                 onClick={() => setTab(t)}
@@ -53,7 +53,7 @@ export default function App() {
                     : 'text-zinc-400 hover:text-white hover:bg-surface-600'
                 }`}
               >
-                {t === 'job' ? 'Задача' : t === 'keys' ? 'Ключи' : t === 'targets' ? 'Цели' : 'Капча'}
+                {t === 'job' ? 'Задача' : t === 'keys' ? 'Ключи' : t === 'targets' ? 'Цели' : t === 'processed' ? 'Проверенные' : 'Капча'}
               </button>
             ))}
           </nav>
@@ -63,6 +63,7 @@ export default function App() {
         {tab === 'keys' && <KeysPanel />}
         {tab === 'targets' && <TargetsPanel />}
         {tab === 'job' && <JobPanel />}
+        {tab === 'processed' && <ProcessedPanel />}
         {tab === 'captcha' && <CaptchaPanel />}
       </main>
     </div>
@@ -518,6 +519,26 @@ function JobPanel() {
     }
   };
 
+  const [estimateLoading, setEstimateLoading] = useState(false);
+  const [estimateResult, setEstimateResult] = useState<
+    | { ok: true; totalCandidates: number; excludedProcessed: number; estimate: number; afterBirthdayFilter?: number }
+    | { ok: false; error: string }
+    | null
+  >(null);
+
+  const runEstimate = async () => {
+    setEstimateLoading(true);
+    setEstimateResult(null);
+    try {
+      const res = await api.jobs.estimate();
+      setEstimateResult(res);
+    } catch (e) {
+      setEstimateResult({ ok: false, error: String((e as Error).message) });
+    } finally {
+      setEstimateLoading(false);
+    }
+  };
+
   const running = status?.status === 'running';
 
   return (
@@ -544,12 +565,39 @@ function JobPanel() {
           >
             Стоп
           </button>
+          <button
+            onClick={runEstimate}
+            disabled={estimateLoading || running}
+            className="px-5 py-2.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {estimateLoading ? '…' : 'Оценить количество'}
+          </button>
           {status && (
             <span className="text-zinc-400 text-sm">
               {status.processed} / {status.totalTargets} · лайков: {status.liked} · пропущено: {status.skipped} · ошибок: {status.errors}
             </span>
           )}
         </div>
+        {estimateResult && (
+          <div className="mb-4 px-4 py-3 rounded-lg bg-surface-800 border border-surface-500 text-sm">
+            {estimateResult.ok === false ? (
+              <span className="text-red-400">{estimateResult.error}</span>
+            ) : (
+              <div className="text-zinc-300">
+                <strong className="text-white">Оценка:</strong> при запуске будет обработано примерно{' '}
+                <strong className="text-emerald-400">{estimateResult.estimate}</strong> человек
+                {estimateResult.totalCandidates > 0 && (
+                  <>
+                    {' '}
+                    (всего кандидатов: {estimateResult.totalCandidates}
+                    {estimateResult.excludedProcessed > 0 && `, уже обработано за сегодня: ${estimateResult.excludedProcessed}`}
+                    {estimateResult.afterBirthdayFilter != null && `, после фильтра «только ДР сегодня»: ${estimateResult.afterBirthdayFilter}`})
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        )}
         {status && status.logs?.length > 0 && (
           <div className="rounded-lg bg-surface-800 border border-surface-500 overflow-hidden">
             <h3 className="px-4 py-2 text-sm font-medium text-zinc-400 border-b border-surface-500">Лог</h3>
@@ -571,6 +619,88 @@ function JobPanel() {
               ))}
             </ul>
           </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function ProcessedPanel() {
+  const today = new Date().toISOString().slice(0, 10);
+  const [date, setDate] = useState(today);
+  const [data, setData] = useState<{ date: string; userIds: number[]; count: number } | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const load = () => {
+    setLoading(true);
+    setError('');
+    api.jobs
+      .processed(date)
+      .then(setData)
+      .catch((e) => {
+        setError(String((e as Error).message));
+        setData(null);
+      })
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    load();
+  }, [date]);
+
+  const copyIds = () => {
+    if (!data?.userIds.length) return;
+    navigator.clipboard.writeText(data.userIds.join('\n'));
+  };
+
+  return (
+    <div className="space-y-6">
+      <section className="bg-surface-700 rounded-xl border border-surface-500 p-5">
+        <h2 className="text-lg font-semibold text-white mb-4">Проверенные / лайкнутые</h2>
+        <div className="flex flex-wrap gap-4 items-center mb-4">
+          <label className="text-sm text-zinc-400">
+            Дата:
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="ml-2 px-3 py-1.5 rounded-lg bg-surface-800 border border-surface-500 text-white"
+            />
+          </label>
+          {data != null && (
+            <span className="text-zinc-400 text-sm">
+              Обработано за выбранную дату: <strong className="text-white">{data.count}</strong>
+            </span>
+          )}
+          {data != null && data.userIds.length > 0 && (
+            <button
+              type="button"
+              onClick={copyIds}
+              className="px-3 py-1.5 rounded-lg bg-surface-600 hover:bg-surface-500 text-zinc-300 text-sm"
+            >
+              Копировать ID
+            </button>
+          )}
+        </div>
+        {error && (
+          <div className="mb-4 px-3 py-2 rounded-lg bg-red-500/10 text-red-400 text-sm">{error}</div>
+        )}
+        {loading && <p className="text-zinc-500 text-sm">Загрузка…</p>}
+        {!loading && data && data.userIds.length > 0 && (
+          <div className="rounded-lg bg-surface-800 border border-surface-500 overflow-hidden">
+            <h3 className="px-4 py-2 text-sm font-medium text-zinc-400 border-b border-surface-500">
+              ID пользователей ({data.count})
+            </h3>
+            <ul className="max-h-96 overflow-y-auto p-2 font-mono text-xs text-zinc-300 flex flex-wrap gap-x-3 gap-y-1">
+              {data.userIds.map((id) => (
+                <li key={id}>{id}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {!loading && data && data.userIds.length === 0 && (
+          <p className="text-zinc-500 text-sm">За выбранную дату никого не обработано.</p>
         )}
       </section>
     </div>

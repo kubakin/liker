@@ -133,6 +133,74 @@ export class JobsService {
     return this.getState();
   }
 
+  /** Оценка: сколько человек будет обработано при запуске (без старта джоба). */
+  async estimate(): Promise<
+    | { ok: true; totalCandidates: number; excludedProcessed: number; estimate: number; afterBirthdayFilter?: number }
+    | { ok: false; error: string }
+  > {
+    const config = await this.targets.get();
+    let userIds: number[] = [];
+    if (config.kind === 'user_ids' && config.userIds?.length) {
+      userIds = config.userIds.map((id) => parseInt(id, 10)).filter((n) => !Number.isNaN(n));
+    } else if (config.kind === 'group' && config.groupId) {
+      const token = await this.apiKeys.getNextAvailableToken();
+      if (!token) return { ok: false, error: 'Нет API ключа для загрузки участников группы' };
+      const limit = config.groupMemberLimit ?? 1000;
+      const res = await this.vk.groupsGetMembers(token.token, config.groupId, limit);
+      if (!res.ok) return { ok: false, error: res.errorMsg || 'Не удалось загрузить участников группы' };
+      userIds = res.data.items;
+    }
+    const totalCandidates = userIds.length;
+    if (totalCandidates === 0) {
+      return { ok: true, totalCandidates: 0, excludedProcessed: 0, estimate: 0 };
+    }
+    const today = this.getTodayDate();
+    const processedToday = await this.getProcessedUserIdsForDate(today);
+    userIds = userIds.filter((id) => !processedToday.has(id));
+    const excludedProcessed = totalCandidates - userIds.length;
+    if (!config.onlyBirthdayToday) {
+      return {
+        ok: true,
+        totalCandidates,
+        excludedProcessed,
+        estimate: userIds.length,
+      };
+    }
+    const token = await this.apiKeys.getNextAvailableToken();
+    if (!token) {
+      return {
+        ok: true,
+        totalCandidates,
+        excludedProcessed,
+        estimate: userIds.length,
+        afterBirthdayFilter: undefined,
+      };
+    }
+    const withBirthday = await this.filterUsersWithBirthdayToday(
+      token.token,
+      userIds,
+      config.minAge ?? undefined,
+      config.maxAge ?? undefined,
+    );
+    return {
+      ok: true,
+      totalCandidates,
+      excludedProcessed,
+      estimate: withBirthday.length,
+      afterBirthdayFilter: withBirthday.length,
+    };
+  }
+
+  /** Список обработанных (проверенных/лайкнутых) за дату. */
+  async getProcessedByDate(date: string): Promise<{ date: string; userIds: number[]; count: number }> {
+    const rows = await this.processedRepo.find({
+      where: { processedDate: date },
+      order: { createdAt: 'ASC' },
+    });
+    const userIds = rows.map((r) => parseInt(r.userId, 10)).filter((n) => !Number.isNaN(n));
+    return { date, userIds, count: userIds.length };
+  }
+
   private async getState(): Promise<JobStateDto> {
     let row = await this.jobRepo.findOne({ where: { id: DEFAULT_JOB_ID } });
     if (!row) {

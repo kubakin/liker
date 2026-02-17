@@ -59,6 +59,15 @@ export const api = {
       currentKeyId?: string;
       logs: { id: string; ts: number; level: string; message: string; meta?: Record<string, unknown> }[];
     }>(`/jobs/status`),
+    estimate: () =>
+      request<
+        | { ok: true; totalCandidates: number; excludedProcessed: number; estimate: number; afterBirthdayFilter?: number }
+        | { ok: false; error: string }
+      >(`/jobs/estimate`),
+    processed: (date?: string) =>
+      request<{ date: string; userIds: number[]; count: number }>(
+        `/jobs/processed${date ? '?date=' + encodeURIComponent(date) : ''}`,
+      ),
   },
   captcha: {
     list: () => request<{ items: { sid: string; img: string; keyId: string; ownerId: number; itemId: number; createdAt: number }[] }>(`/captcha`),
