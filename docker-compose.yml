@@ -1,0 +1,52 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: liker
+      POSTGRES_PASSWORD: liker
+      POSTGRES_DB: liker
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U liker -d liker"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3002
+      DATABASE_URL: postgresql://liker:liker@postgres:5432/liker
+      # Переопределите через env_file или переменные окружения хоста:
+      # VK_APP_ID=...
+      # VK_APP_SECRET=...
+      # VK_REDIRECT_URI=...
+      # VK_FRONTEND_REDIRECT_URI=http://localhost
+      # VK_ID_APP_ID=...
+    # Раскомментируйте и создайте .env (см. .env.docker.example) для VK и др.:
+    # env_file:
+    #   - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    expose:
+      - "3002"
+
+  admin:
+    build:
+      context: ./apps/admin
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - api
+
+volumes:
+  postgres_data:
