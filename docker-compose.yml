@@ -19,6 +19,8 @@ services:
       context: ./apps/api
       dockerfile: Dockerfile
     restart: unless-stopped
+     ports:
+      - "3002:3002"
     environment:
       NODE_ENV: production
       PORT: 3002
@@ -30,13 +32,13 @@ services:
       # VK_FRONTEND_REDIRECT_URI=http://localhost
       # VK_ID_APP_ID=...
     # Раскомментируйте и создайте .env (см. .env.docker.example) для VK и др.:
-    # env_file:
-    #   - .env
+    env_file:
+      - .env
     depends_on:
       postgres:
         condition: service_healthy
     expose:
-      - "3002:3002"
+      - "3002"
 
   admin:
     build:
