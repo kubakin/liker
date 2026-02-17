@@ -625,10 +625,20 @@ function JobPanel() {
   );
 }
 
+const PROCESSED_STATUS_LABELS: Record<string, string> = {
+  success: 'Лайк поставлен',
+  skipped: 'Пропущен',
+  error: 'Ошибка',
+};
+
 function ProcessedPanel() {
   const today = new Date().toISOString().slice(0, 10);
   const [date, setDate] = useState(today);
-  const [data, setData] = useState<{ date: string; userIds: number[]; count: number } | null>(null);
+  const [data, setData] = useState<{
+    date: string;
+    items: { userId: number; status: string }[];
+    count: number;
+  } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -650,8 +660,8 @@ function ProcessedPanel() {
   }, [date]);
 
   const copyIds = () => {
-    if (!data?.userIds.length) return;
-    navigator.clipboard.writeText(data.userIds.join('\n'));
+    if (!data?.items.length) return;
+    navigator.clipboard.writeText(data.items.map((i) => i.userId).join('\n'));
   };
 
   return (
@@ -673,7 +683,7 @@ function ProcessedPanel() {
               Обработано за выбранную дату: <strong className="text-white">{data.count}</strong>
             </span>
           )}
-          {data != null && data.userIds.length > 0 && (
+          {data != null && data.items.length > 0 && (
             <button
               type="button"
               onClick={copyIds}
@@ -687,19 +697,50 @@ function ProcessedPanel() {
           <div className="mb-4 px-3 py-2 rounded-lg bg-red-500/10 text-red-400 text-sm">{error}</div>
         )}
         {loading && <p className="text-zinc-500 text-sm">Загрузка…</p>}
-        {!loading && data && data.userIds.length > 0 && (
-          <div className="rounded-lg bg-surface-800 border border-surface-500 overflow-hidden">
-            <h3 className="px-4 py-2 text-sm font-medium text-zinc-400 border-b border-surface-500">
-              ID пользователей ({data.count})
-            </h3>
-            <ul className="max-h-96 overflow-y-auto p-2 font-mono text-xs text-zinc-300 flex flex-wrap gap-x-3 gap-y-1">
-              {data.userIds.map((id) => (
-                <li key={id}>{id}</li>
-              ))}
-            </ul>
+        {!loading && data && data.items.length > 0 && (
+          <div className="rounded-lg bg-surface-800 border border-surface-500 overflow-hidden overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-zinc-400 border-b border-surface-500">
+                  <th className="px-4 py-2 font-medium">ID</th>
+                  <th className="px-4 py-2 font-medium">Статус</th>
+                  <th className="px-4 py-2 font-medium">Ссылка</th>
+                </tr>
+              </thead>
+              <tbody className="text-zinc-300">
+                {data.items.map((item) => (
+                  <tr key={item.userId} className="border-b border-surface-600 last:border-0">
+                    <td className="px-4 py-2 font-mono">{item.userId}</td>
+                    <td className="px-4 py-2">
+                      <span
+                        className={
+                          item.status === 'success'
+                            ? 'text-emerald-400'
+                            : item.status === 'error'
+                              ? 'text-red-400'
+                              : 'text-amber-400'
+                        }
+                      >
+                        {PROCESSED_STATUS_LABELS[item.status] ?? item.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2">
+                      <a
+                        href={`https://vk.com/id${item.userId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sky-400 hover:underline"
+                      >
+                        vk.com/id{item.userId}
+                      </a>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
-        {!loading && data && data.userIds.length === 0 && (
+        {!loading && data && data.items.length === 0 && (
           <p className="text-zinc-500 text-sm">За выбранную дату никого не обработано.</p>
         )}
       </section>

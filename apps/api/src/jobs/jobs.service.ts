@@ -192,13 +192,17 @@ export class JobsService {
   }
 
   /** Список обработанных (проверенных/лайкнутых) за дату. */
-  async getProcessedByDate(date: string): Promise<{ date: string; userIds: number[]; count: number }> {
+  async getProcessedByDate(
+    date: string,
+  ): Promise<{ date: string; items: { userId: number; status: string }[]; count: number }> {
     const rows = await this.processedRepo.find({
       where: { processedDate: date },
       order: { createdAt: 'ASC' },
     });
-    const userIds = rows.map((r) => parseInt(r.userId, 10)).filter((n) => !Number.isNaN(n));
-    return { date, userIds, count: userIds.length };
+    const items = rows
+      .map((r) => ({ userId: parseInt(r.userId, 10), status: r.status || 'success' }))
+      .filter((item) => !Number.isNaN(item.userId));
+    return { date, items, count: items.length };
   }
 
   private async getState(): Promise<JobStateDto> {
@@ -338,7 +342,7 @@ export class JobsService {
 
       const wallRes = await this.vk.wallGet(keyRecord.token, ownerId, 1);
       if (!wallRes.ok) {
-        await this.markProcessedToday(ownerId, today);
+        await this.markProcessedToday(ownerId, today, 'error');
         await this.addLog('warn', `Стена ${ownerId}: ${wallRes.errorMsg}`, {
           ownerId,
           errorCode: wallRes.errorCode,
@@ -350,7 +354,7 @@ export class JobsService {
       }
       const items = wallRes.data.items;
       if (!items || items.length === 0) {
-        await this.markProcessedToday(ownerId, today);
+        await this.markProcessedToday(ownerId, today, 'skipped');
         await this.addLog('info', `Нет постов на стене ${ownerId}`, { ownerId });
         const s = await this.getState();
         await this.setState({ processed: s.processed + 1, skipped: s.skipped + 1 });
@@ -367,7 +371,7 @@ export class JobsService {
         post.id,
       );
       if (isLikedRes.ok && isLikedRes.data.liked === 1) {
-        await this.markProcessedToday(ownerId, today);
+        await this.markProcessedToday(ownerId, today, 'skipped');
         await this.addLog('info', `Уже лайкнуто: стена ${ownerId}, пост ${post.id}`, {
           ownerId,
           postId: post.id,
@@ -385,7 +389,7 @@ export class JobsService {
         post.id,
       );
       if (likeRes.ok) {
-        await this.markProcessedToday(ownerId, today);
+        await this.markProcessedToday(ownerId, today, 'success');
         await this.addLog('success', `Лайк поставлен: стена ${ownerId}, пост ${post.id}`, {
           ownerId,
           postId: post.id,
@@ -397,7 +401,11 @@ export class JobsService {
           break;
         }
       } else {
-        await this.markProcessedToday(ownerId, today);
+        await this.markProcessedToday(
+          ownerId,
+          today,
+          this.vk.isCaptcha(likeRes.errorCode) ? 'skipped' : 'error',
+        );
         if (this.vk.isCaptcha(likeRes.errorCode)) {
           await this.captcha.addPending(
             likeRes.captchaSid!,
@@ -467,11 +475,16 @@ export class JobsService {
       .execute();
   }
 
-  private async markProcessedToday(userId: number, date: string): Promise<void> {
+  private async markProcessedToday(
+    userId: number,
+    date: string,
+    status: 'success' | 'skipped' | 'error' = 'success',
+  ): Promise<void> {
     await this.processedRepo.upsert(
       {
         processedDate: date,
         userId: String(userId),
+        status,
         createdAt: String(Date.now()),
       },
       { conflictPaths: ['processedDate', 'userId'] },

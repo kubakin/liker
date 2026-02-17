@@ -65,7 +65,7 @@ export const api = {
         | { ok: false; error: string }
       >(`/jobs/estimate`),
     processed: (date?: string) =>
-      request<{ date: string; userIds: number[]; count: number }>(
+      request<{ date: string; items: { userId: number; status: string }[]; count: number }>(
         `/jobs/processed${date ? '?date=' + encodeURIComponent(date) : ''}`,
       ),
   },
