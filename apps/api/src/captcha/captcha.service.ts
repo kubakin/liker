@@ -70,25 +70,59 @@ export class CaptchaService {
     return { ok: false, errorCode: result.errorCode, errorMsg: result.errorMsg };
   }
 
-  /** Загружает картинку по URL с сервера и возвращает data URL, чтобы в браузере не запрашивать VK (там отдают HTML с «установите новую версию»). */
+  /** Загружает картинку по URL с сервера (User-Agent и Referer как у браузера, иначе VK отдаёт HTML). */
   private async normalizeCaptchaImage(img: string): Promise<string> {
     const trimmed = img.trim();
     if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
       return img;
     }
+    const fetched = await this.fetchVkCaptchaImage(trimmed);
+    if (fetched) {
+      const mime = fetched.contentType || 'image/png';
+      return `data:${mime};base64,${fetched.buffer.toString('base64')}`;
+    }
+    return img;
+  }
+
+  /** Возвращает буфер картинки капчи для GET /captcha/:sid/image (прокси для админки и для уже сохранённых URL). */
+  async getCaptchaImage(sid: string): Promise<{ buffer: Buffer; contentType: string } | null> {
+    const pending = await this.getPending(sid);
+    if (!pending) return null;
+    const img = pending.img.trim();
+    if (img.startsWith('data:')) {
+      const match = img.match(/^data:([^;]+);base64,(.+)$/);
+      if (match) {
+        const contentType = match[1].trim();
+        const b64 = match[2];
+        const buffer = Buffer.from(b64, 'base64');
+        return { buffer, contentType };
+      }
+      return null;
+    }
+    if (img.startsWith('http://') || img.startsWith('https://')) {
+      return this.fetchVkCaptchaImage(img);
+    }
+    return null;
+  }
+
+  private async fetchVkCaptchaImage(url: string): Promise<{ buffer: Buffer; contentType: string } | null> {
     try {
-      const res = await fetch(trimmed, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Liker/1.0)' },
+      const res = await fetch(url, {
+        headers: {
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          Referer: 'https://vk.com/',
+          Accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+        },
       });
-      if (!res.ok) return img;
+      if (!res.ok) return null;
       const contentType = res.headers.get('content-type') ?? '';
-      if (!contentType.startsWith('image/')) return img;
+      if (!contentType.startsWith('image/')) return null;
       const buf = await res.arrayBuffer();
-      const b64 = Buffer.from(buf).toString('base64');
       const mime = contentType.split(';')[0].trim() || 'image/png';
-      return `data:${mime};base64,${b64}`;
+      return { buffer: Buffer.from(buf), contentType: mime };
     } catch {
-      return img;
+      return null;
     }
   }
 

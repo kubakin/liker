@@ -790,7 +790,7 @@ function CaptchaPanel() {
                 key={c.sid}
                 className="flex flex-wrap items-end gap-4 p-4 rounded-lg bg-surface-600 border border-surface-500"
               >
-                <img src={c.img} alt="captcha" className="rounded border border-surface-500" />
+                <img src={`/api/captcha/${c.sid}/image`} alt="captcha" className="rounded border border-surface-500" />
                 <div className="flex-1 min-w-[200px]">
                   <input
                     value={input[c.sid] ?? ''}
