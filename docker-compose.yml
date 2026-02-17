@@ -36,7 +36,7 @@ services:
       postgres:
         condition: service_healthy
     expose:
-      - "3002"
+      - "3002:3002"
 
   admin:
     build:
