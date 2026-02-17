@@ -274,7 +274,7 @@ function TargetsPanel() {
   const saveGroup = async () => {
     if (!groupId.trim()) return;
     try {
-      const limit = Math.min(1000, Math.max(1, groupMemberLimit));
+      const limit = Math.min(10000, Math.max(1, groupMemberLimit));
       await api.targets.setGroup(groupId.trim(), limit);
       setMessage('Сохранено');
       load();
@@ -285,7 +285,7 @@ function TargetsPanel() {
 
   const saveGroupLimit = async () => {
     try {
-      const limit = Math.min(1000, Math.max(1, groupMemberLimit));
+      const limit = Math.min(10000, Math.max(1, groupMemberLimit));
       await api.targets.setGroupMemberLimit(limit);
       setMessage('Лимит сохранён');
       load();
@@ -443,7 +443,7 @@ function TargetsPanel() {
                 <input
                   type="number"
                   min={1}
-                  max={1000}
+                  max={10000}
                   value={groupMemberLimit}
                   onChange={(e) => setGroupMemberLimit(Number(e.target.value) || 1000)}
                   className="ml-2 w-20 px-2 py-1 rounded bg-surface-600 border border-surface-500 text-sm"

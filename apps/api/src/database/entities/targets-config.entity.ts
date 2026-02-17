@@ -14,7 +14,7 @@ export class TargetsConfigEntity {
   @Column({ type: 'varchar', length: 255, nullable: true })
   groupId!: string | null;
 
-  /** Лимит участников группы (1–1000), когда цели берутся из группы. */
+  /** Лимит участников группы (1–10000, загрузка пачками по 1000), когда цели берутся из группы. */
   @Column({ type: 'int', nullable: true })
   groupMemberLimit!: number | null;
 

@@ -35,7 +35,7 @@ export class TargetsController {
   setGroupMemberLimit(@Body() body: { limit: number }) {
     const limit = body?.limit;
     if (limit == null || typeof limit !== 'number') {
-      return { error: 'limit is required (number 1–1000)' };
+      return { error: 'limit is required (number 1–10000)' };
     }
     return this.targets.setGroupMemberLimit(limit);
   }

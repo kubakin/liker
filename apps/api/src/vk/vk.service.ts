@@ -127,21 +127,39 @@ export class VkService {
     return this.parseResponse(json);
   }
 
+  /** Загружает участников группы. При count > 1000 делает запросы пачками по 1000 (лимит VK API). */
   async groupsGetMembers(
     accessToken: string,
     groupId: string,
     count = 1000,
   ): Promise<VkResult<{ items: number[] }>> {
     const id = this.normalizeGroupId(groupId);
-    const limit = Math.min(1000, Math.max(1, Math.floor(count)));
-    const params = new URLSearchParams({
-      v: VK_API_VERSION,
-      access_token: accessToken,
-      group_id: id,
-      count: String(limit),
-    });
-    const json = await this.fetchVk<{ items: number[] }>(`${this.baseUrl}/groups.getMembers?${params}`);
-    return this.parseResponse(json);
+    const totalWanted = Math.max(1, Math.floor(count));
+    const perRequest = 1000;
+    const items: number[] = [];
+    let offset = 0;
+
+    while (items.length < totalWanted) {
+      const toFetch = Math.min(perRequest, totalWanted - items.length);
+      const params = new URLSearchParams({
+        v: VK_API_VERSION,
+        access_token: accessToken,
+        group_id: id,
+        count: String(toFetch),
+        offset: String(offset),
+      });
+      const json = await this.fetchVk<{ items: number[] }>(`${this.baseUrl}/groups.getMembers?${params}`);
+      const parsed = this.parseResponse(json);
+      if (!parsed.ok) return parsed;
+      const chunk = parsed.data.items ?? [];
+      items.push(...chunk);
+      if (chunk.length < toFetch) break;
+      offset += chunk.length;
+      if (offset >= totalWanted) break;
+      await new Promise((r) => setTimeout(r, 250));
+    }
+
+    return { ok: true, data: { items } };
   }
 
   private parseResponse<T>(json: VkApiResponse<T>): VkResult<T> {

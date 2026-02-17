@@ -11,7 +11,7 @@ export interface TargetsConfig {
   kind: 'user_ids' | 'group';
   userIds?: string[];
   groupId?: string;
-  /** Сколько участников группы загружать (1–1000). */
+  /** Сколько участников группы загружать (1–10000, пачками по 1000). */
   groupMemberLimit?: number;
   /** Лайкать только у кого сегодня ДР. */
   onlyBirthdayToday?: boolean;
@@ -104,7 +104,7 @@ export class TargetsService {
 
     const limit =
       groupMemberLimit != null
-        ? Math.min(1000, Math.max(1, Math.floor(Number(groupMemberLimit))))
+        ? Math.min(10000, Math.max(1, Math.floor(Number(groupMemberLimit))))
         : null;
 
     const key = await this.apiKeys.getNextAvailableToken();
@@ -159,7 +159,7 @@ export class TargetsService {
     if (!row || row.kind !== 'group') {
       throw new BadRequestException('Сначала укажите группу');
     }
-    const value = Math.min(1000, Math.max(1, Math.floor(Number(limit))));
+    const value = Math.min(10000, Math.max(1, Math.floor(Number(limit))));
     row.groupMemberLimit = value;
     row.updatedAt = String(Date.now());
     await this.repo.save(row);
