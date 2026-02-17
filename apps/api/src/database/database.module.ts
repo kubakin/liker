@@ -9,7 +9,6 @@ import {
 } from './entities';
 
 function getTypeOrmOptions() {
-  console.log(process.env)
   const url = process.env.DATABASE_URL;
   const passwordOverride = process.env.DATABASE_PASSWORD;
   const base = {
@@ -28,7 +27,7 @@ function getTypeOrmOptions() {
         : (u.password != null ? String(u.password) : '');
     return {
       ...base,
-      host: 'localhost',
+      host: u.hostname || 'localhost',
       port: u.port ? parseInt(u.port, 10) : 5432,
       username: u.username || undefined,
       password,
