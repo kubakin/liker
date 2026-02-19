@@ -181,9 +181,10 @@ export class GroupExportService {
       };
     }
     const currentMemberIds = new Set(res.data.items ?? []);
+    const wasInExportIds = await this.getExportMemberIdSet(exportId);
     let cameToGroupCount = 0;
     for (const uid of likedAfterExportIds) {
-      if (currentMemberIds.has(uid)) cameToGroupCount++;
+      if (currentMemberIds.has(uid) && !wasInExportIds.has(uid)) cameToGroupCount++;
     }
     return {
       exportId,
@@ -195,7 +196,7 @@ export class GroupExportService {
     };
   }
 
-  /** Список ID пользователей: лайкнуты после выгрузки и сейчас в группе (пришли от лайков). */
+  /** Список ID пользователей: лайкнуты после выгрузки и сейчас в группе, но не были в выгрузке (реально пришли от лайков). */
   async getCameFromLikesList(exportId: string): Promise<{ userIds: number[]; count: number } | null> {
     const exp = await this.exportRepo.findOne({ where: { id: exportId } });
     if (!exp) return null;
@@ -211,7 +212,18 @@ export class GroupExportService {
     const res = await this.vk.groupsGetAllMembers(tokenRecord.token, exp.groupId);
     if (!res.ok) return { userIds: [], count: 0 };
     const currentMemberIds = new Set(res.data.items ?? []);
-    const userIds = [...likedAfterExportIds].filter((uid) => currentMemberIds.has(uid)).sort((a, b) => a - b);
+    const wasInExportIds = await this.getExportMemberIdSet(exportId);
+    const userIds = [...likedAfterExportIds]
+      .filter((uid) => currentMemberIds.has(uid) && !wasInExportIds.has(uid))
+      .sort((a, b) => a - b);
     return { userIds, count: userIds.length };
+  }
+
+  private async getExportMemberIdSet(exportId: string): Promise<Set<number>> {
+    const rows = await this.memberRepo.find({
+      where: { exportId },
+      select: ['userId'],
+    });
+    return new Set(rows.map((r) => parseInt(r.userId, 10)));
   }
 }
