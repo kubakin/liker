@@ -162,6 +162,37 @@ export class VkService {
     return { ok: true, data: { items } };
   }
 
+  /** Загружает всех участников группы (пачками по 1000 до конца). */
+  async groupsGetAllMembers(
+    accessToken: string,
+    groupId: string,
+  ): Promise<VkResult<{ items: number[] }>> {
+    const id = this.normalizeGroupId(groupId);
+    const items: number[] = [];
+    let offset = 0;
+    const perRequest = 1000;
+
+    for (;;) {
+      const params = new URLSearchParams({
+        v: VK_API_VERSION,
+        access_token: accessToken,
+        group_id: id,
+        count: String(perRequest),
+        offset: String(offset),
+      });
+      const json = await this.fetchVk<{ items: number[] }>(`${this.baseUrl}/groups.getMembers?${params}`);
+      const parsed = this.parseResponse(json);
+      if (!parsed.ok) return parsed;
+      const chunk = parsed.data.items ?? [];
+      items.push(...chunk);
+      if (chunk.length < perRequest) break;
+      offset += chunk.length;
+      await new Promise((r) => setTimeout(r, 250));
+    }
+
+    return { ok: true, data: { items } };
+  }
+
   private parseResponse<T>(json: VkApiResponse<T>): VkResult<T> {
     if (json.response !== undefined) {
       return { ok: true, data: json.response };

@@ -6,6 +6,8 @@ import { ApiKeysModule } from './api-keys/api-keys.module';
 import { TargetsModule } from './targets/targets.module';
 import { JobsModule } from './jobs/jobs.module';
 import { CaptchaModule } from './captcha/captcha.module';
+import { GroupExportModule } from './group-export/group-export.module';
+import { LikedUserModule } from './liked-user/liked-user.module';
 import { AuthModule } from './auth/auth.module';
 
 @Module({
@@ -20,6 +22,8 @@ import { AuthModule } from './auth/auth.module';
     TargetsModule,
     JobsModule,
     CaptchaModule,
+    GroupExportModule,
+    LikedUserModule,
     AuthModule,
   ],
 })

@@ -73,6 +73,52 @@ export const api = {
     list: () => request<{ items: { sid: string; img: string; keyId: string; ownerId: number; itemId: number; createdAt: number }[] }>(`/captcha`),
     solve: (sid: string, key: string) => request<{ ok: boolean; likes?: number; error?: string }>(`/captcha/${sid}/solve`, { method: 'POST', body: JSON.stringify({ key }) }),
   },
+  groupExport: {
+    export: (groupId: string) =>
+      request<
+        | { ok: true; exportId: string; groupId: string; count: number; exportedAt: number }
+        | { ok: false; error: string }
+      >(`/group-export`, { method: 'POST', body: JSON.stringify({ groupId }) }),
+    list: (groupId?: string) =>
+      request<{ id: string; groupId: string; count: number; exportedAt: number }[]>(
+        `/group-export${groupId ? '?groupId=' + encodeURIComponent(groupId) : ''}`,
+      ),
+    one: (id: string) =>
+      request<{ id: string; groupId: string; count: number; exportedAt: number }>(`/group-export/${id}`),
+    members: (id: string, limit?: number, offset?: number) => {
+      const params = new URLSearchParams();
+      if (limit != null) params.set('limit', String(limit));
+      if (offset != null) params.set('offset', String(offset));
+      return request<{ exportId: string; userIds: number[]; count: number }>(
+        `/group-export/${id}/members${params.toString() ? '?' + params : ''}`,
+      );
+    },
+    conversion: (id: string) =>
+      request<{ exportId: string; totalInExport: number; likedFromExport: number; totalLikedEver: number }>(
+        `/group-export/${id}/conversion`,
+      ),
+    afterStats: (id: string) =>
+      request<{
+        exportId: string;
+        exportedAt: number;
+        groupId: string;
+        likedAfterExportCount: number;
+        currentGroupCount: number;
+        cameToGroupCount: number;
+        error?: string;
+      }>(`/group-export/${id}/after-stats`),
+  },
+  likedUsers: {
+    count: () => request<{ count: number }>(`/liked-users/count`),
+    list: (limit?: number, offset?: number) => {
+      const params = new URLSearchParams();
+      if (limit != null) params.set('limit', String(limit));
+      if (offset != null) params.set('offset', String(offset));
+      return request<{ items: { userId: number; likedAt: number }[] }>(
+        `/liked-users${params.toString() ? '?' + params : ''}`,
+      );
+    },
+  },
   auth: {
     vkidConfig: (redirectBase?: string) =>
       request<{ appId: number | null; redirectUrl: string; hint?: string }>(`/auth/vkid/config${redirectBase ? '?redirect_base=' + encodeURIComponent(redirectBase) : ''}`),

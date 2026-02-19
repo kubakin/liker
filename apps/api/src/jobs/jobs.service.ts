@@ -6,6 +6,7 @@ import type { TargetsConfig } from '../targets/targets.service';
 import { TargetsService } from '../targets/targets.service';
 import { ApiKeysService } from '../api-keys/api-keys.service';
 import { CaptchaService } from '../captcha/captcha.service';
+import { LikedUserService } from '../liked-user/liked-user.service';
 import { JobStateEntity, ProcessedUserEntity, type LogEntryDto } from '../database/entities';
 
 const DEFAULT_JOB_ID = 'default';
@@ -39,6 +40,7 @@ export class JobsService {
     private readonly targets: TargetsService,
     private readonly apiKeys: ApiKeysService,
     private readonly captcha: CaptchaService,
+    private readonly likedUser: LikedUserService,
   ) {}
 
   async start() {
@@ -86,17 +88,18 @@ export class JobsService {
       if (!token) {
         await this.addLog('warn', 'Нет ключа для проверки ДР — лайкаем всех.');
       } else {
-        const withBirthdayToday = await this.filterUsersWithBirthdayToday(
+        const withBirthday = await this.filterUsersWithBirthdayInNextDays(
           token.token,
           userIds,
+          7,
           config.minAge ?? undefined,
           config.maxAge ?? undefined,
         );
         await this.addLog(
           'info',
-          `Фильтр «только ДР сегодня»: ${userIds.length} → ${withBirthdayToday.length} целей`,
+          `Фильтр «ДР в ближайшие 7 дней»: ${userIds.length} → ${withBirthday.length} целей`,
         );
-        userIds = withBirthdayToday;
+        userIds = withBirthday;
       }
     }
     if (userIds.length === 0) {
@@ -176,9 +179,10 @@ export class JobsService {
         afterBirthdayFilter: undefined,
       };
     }
-    const withBirthday = await this.filterUsersWithBirthdayToday(
+    const withBirthday = await this.filterUsersWithBirthdayInNextDays(
       token.token,
       userIds,
+      7,
       config.minAge ?? undefined,
       config.maxAge ?? undefined,
     );
@@ -390,6 +394,7 @@ export class JobsService {
       );
       if (likeRes.ok) {
         await this.markProcessedToday(ownerId, today, 'success');
+        await this.likedUser.addLiked(ownerId);
         await this.addLog('success', `Лайк поставлен: стена ${ownerId}, пост ${post.id}`, {
           ownerId,
           postId: post.id,
@@ -491,17 +496,24 @@ export class JobsService {
     );
   }
 
-  /** Оставляет только пользователей, у которых сегодня ДР и (если заданы) возраст в диапазоне. Запросы по 10 пользователей. */
-  private async filterUsersWithBirthdayToday(
+  /** Оставляет только пользователей, у которых ДР в ближайшие N дней (сегодня + (N-1) дней) и (если заданы) возраст в диапазоне. Запросы по 10 пользователей. */
+  private async filterUsersWithBirthdayInNextDays(
     accessToken: string,
     userIds: number[],
+    days: number,
     minAge?: number | null,
     maxAge?: number | null,
   ): Promise<number[]> {
     const now = new Date();
-    const todayDay = now.getDate();
-    const todayMonth = now.getMonth() + 1;
     const currentYear = now.getFullYear();
+    const allowedDayMonths = new Set<string>();
+    for (let i = 0; i < days; i++) {
+      const d = new Date(now);
+      d.setDate(d.getDate() + i);
+      const day = d.getDate();
+      const month = d.getMonth() + 1;
+      allowedDayMonths.add(`${day}-${month}`);
+    }
     const result: number[] = [];
     const CHUNK_SIZE = 10;
     for (let i = 0; i < userIds.length; i += CHUNK_SIZE) {
@@ -518,7 +530,7 @@ export class JobsService {
         const day = parseInt(parts[0], 10);
         const month = parseInt(parts[1], 10);
         if (Number.isNaN(day) || Number.isNaN(month)) continue;
-        if (day !== todayDay || month !== todayMonth) continue;
+        if (!allowedDayMonths.has(`${day}-${month}`)) continue;
         if (minAge != null || maxAge != null) {
           const year = parts.length >= 3 ? parseInt(parts[2], 10) : null;
           if (year == null || Number.isNaN(year)) continue;

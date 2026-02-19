@@ -6,6 +6,9 @@ import {
   PendingCaptchaEntity,
   JobStateEntity,
   ProcessedUserEntity,
+  GroupExportEntity,
+  GroupExportMemberEntity,
+  LikedUserEntity,
 } from './entities';
 
 function getTypeOrmOptions() {
@@ -13,7 +16,16 @@ function getTypeOrmOptions() {
   const passwordOverride = process.env.DATABASE_PASSWORD;
   const base = {
     type: 'postgres' as const,
-    entities: [ApiKeyEntity, TargetsConfigEntity, PendingCaptchaEntity, JobStateEntity, ProcessedUserEntity],
+    entities: [
+      ApiKeyEntity,
+      TargetsConfigEntity,
+      PendingCaptchaEntity,
+      JobStateEntity,
+      ProcessedUserEntity,
+      GroupExportEntity,
+      GroupExportMemberEntity,
+      LikedUserEntity,
+    ],
     synchronize: true,
     logging: process.env.TYPEORM_LOGGING === 'true',
     password: '', // pg требует строку

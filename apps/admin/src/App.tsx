@@ -3,7 +3,7 @@ import { api } from './api';
 
 const VKID_OAUTH2_RESPONSE = 'oauth2_authorize_response';
 
-type Tab = 'keys' | 'targets' | 'job' | 'processed' | 'captcha';
+type Tab = 'keys' | 'targets' | 'job' | 'processed' | 'captcha' | 'conversion';
 
 export default function App() {
   const [tab, setTab] = useState<Tab>('job');
@@ -43,7 +43,7 @@ export default function App() {
             Liker
           </h1>
           <nav className="flex gap-1">
-            {(['job', 'keys', 'targets', 'processed', 'captcha'] as const).map((t) => (
+            {(['job', 'keys', 'targets', 'processed', 'captcha', 'conversion'] as const).map((t) => (
               <button
                 key={t}
                 onClick={() => setTab(t)}
@@ -53,7 +53,7 @@ export default function App() {
                     : 'text-zinc-400 hover:text-white hover:bg-surface-600'
                 }`}
               >
-                {t === 'job' ? 'Задача' : t === 'keys' ? 'Ключи' : t === 'targets' ? 'Цели' : t === 'processed' ? 'Проверенные' : 'Капча'}
+                {t === 'job' ? 'Задача' : t === 'keys' ? 'Ключи' : t === 'targets' ? 'Цели' : t === 'processed' ? 'Проверенные' : t === 'captcha' ? 'Капча' : 'Конверсия'}
               </button>
             ))}
           </nav>
@@ -65,6 +65,7 @@ export default function App() {
         {tab === 'job' && <JobPanel />}
         {tab === 'processed' && <ProcessedPanel />}
         {tab === 'captcha' && <CaptchaPanel />}
+        {tab === 'conversion' && <ConversionPanel />}
       </main>
     </div>
   );
@@ -391,7 +392,7 @@ function TargetsPanel() {
             onChange={async (e) => {
               try {
                 await api.targets.setOnlyBirthdayToday(e.target.checked);
-                setMessage(e.target.checked ? 'Включено: только у кого сегодня ДР' : 'Выключено');
+                setMessage(e.target.checked ? 'Включено: только у кого ДР в ближайшие 7 дней' : 'Выключено');
                 load();
               } catch (err) {
                 setMessage(String((err as Error).message));
@@ -400,8 +401,8 @@ function TargetsPanel() {
             className="rounded border-surface-500 bg-surface-600 text-accent focus:ring-accent"
           />
           <span className="text-sm text-zinc-300">
-            Лайкать только у кого сегодня ДР
-            <span className="text-zinc-500 ml-1">(при группе — только участники с ДР сегодня)</span>
+            Лайкать только у кого ДР в ближайшие 7 дней
+            <span className="text-zinc-500 ml-1">(при группе — только участники с ДР в ближайшие 7 дней)</span>
           </span>
         </label>
         {message && (
@@ -591,7 +592,7 @@ function JobPanel() {
                     {' '}
                     (всего кандидатов: {estimateResult.totalCandidates}
                     {estimateResult.excludedProcessed > 0 && `, уже обработано за сегодня: ${estimateResult.excludedProcessed}`}
-                    {estimateResult.afterBirthdayFilter != null && `, после фильтра «только ДР сегодня»: ${estimateResult.afterBirthdayFilter}`})
+                    {estimateResult.afterBirthdayFilter != null && `, после фильтра «ДР в ближайшие 7 дней»: ${estimateResult.afterBirthdayFilter}`})
                   </>
                 )}
               </div>
@@ -742,6 +743,248 @@ function ProcessedPanel() {
         )}
         {!loading && data && data.items.length === 0 && (
           <p className="text-zinc-500 text-sm">За выбранную дату никого не обработано.</p>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function ConversionPanel() {
+  const [groupId, setGroupId] = useState('');
+  const [exportLoading, setExportLoading] = useState(false);
+  const [exportMessage, setExportMessage] = useState('');
+  const [exports, setExports] = useState<{ id: string; groupId: string; count: number; exportedAt: number }[]>([]);
+  const [selectedExportId, setSelectedExportId] = useState<string | null>(null);
+  const [conversion, setConversion] = useState<{
+    exportId: string;
+    totalInExport: number;
+    likedFromExport: number;
+    totalLikedEver: number;
+  } | null>(null);
+  const [afterStats, setAfterStats] = useState<{
+    likedAfterExportCount: number;
+    currentGroupCount: number;
+    cameToGroupCount: number;
+    error?: string;
+  } | null>(null);
+  const [afterStatsLoading, setAfterStatsLoading] = useState(false);
+  const [likedCount, setLikedCount] = useState<number | null>(null);
+  const [likedItems, setLikedItems] = useState<{ userId: number; likedAt: number }[]>([]);
+
+  const loadExports = () =>
+    api.groupExport.list().then(setExports).catch(() => setExports([]));
+  const loadLikedCount = () =>
+    api.likedUsers.count().then((r) => setLikedCount(r.count)).catch(() => setLikedCount(null));
+  const loadLikedList = () =>
+    api.likedUsers.list(100, 0).then((r) => setLikedItems(r.items)).catch(() => setLikedItems([]));
+
+  useEffect(() => {
+    loadExports();
+    loadLikedCount();
+    loadLikedList();
+  }, []);
+
+  const runExport = async () => {
+    const g = groupId.trim();
+    if (!g) return;
+    setExportLoading(true);
+    setExportMessage('');
+    try {
+      const res = await api.groupExport.export(g);
+      if (res.ok === false) {
+        setExportMessage(res.error ?? 'Ошибка');
+      } else {
+        setExportMessage(`Выгружено ${res.count} участников.`);
+        setGroupId('');
+        loadExports();
+      }
+    } catch (e) {
+      setExportMessage(String((e as Error).message));
+    } finally {
+      setExportLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!selectedExportId) {
+      setConversion(null);
+      setAfterStats(null);
+      return;
+    }
+    setAfterStats(null);
+    api.groupExport
+      .conversion(selectedExportId)
+      .then((res: { exportId?: string; error?: string }) => {
+        if (res.error || !res.exportId) setConversion(null);
+        else setConversion(res as { exportId: string; totalInExport: number; likedFromExport: number; totalLikedEver: number });
+      })
+      .catch(() => setConversion(null));
+  }, [selectedExportId]);
+
+  const loadAfterStats = async () => {
+    if (!selectedExportId) return;
+    setAfterStatsLoading(true);
+    setAfterStats(null);
+    try {
+      const res = await api.groupExport.afterStats(selectedExportId);
+      if (res.error) {
+        setAfterStats({
+          likedAfterExportCount: res.likedAfterExportCount,
+          currentGroupCount: res.currentGroupCount,
+          cameToGroupCount: res.cameToGroupCount,
+          error: res.error,
+        });
+      } else {
+        setAfterStats({
+          likedAfterExportCount: res.likedAfterExportCount,
+          currentGroupCount: res.currentGroupCount,
+          cameToGroupCount: res.cameToGroupCount,
+        });
+      }
+    } catch {
+      setAfterStats(null);
+    } finally {
+      setAfterStatsLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <section className="bg-surface-700 rounded-xl border border-surface-500 p-5">
+        <h2 className="text-lg font-semibold text-white mb-4">Выгрузка группы в БД</h2>
+        <p className="text-zinc-400 text-sm mb-4">
+          Загрузите всех участников группы и сохраните их ID в базу — потом можно смотреть конверсию (сколько из них уже лайкнуты).
+        </p>
+        <div className="flex flex-wrap gap-3 items-center">
+          <input
+            value={groupId}
+            onChange={(e) => setGroupId(e.target.value)}
+            placeholder="ID группы или short name"
+            className="px-3 py-2 rounded-lg bg-surface-800 border border-surface-500 text-white w-64"
+          />
+          <button
+            onClick={runExport}
+            disabled={exportLoading || !groupId.trim()}
+            className="px-4 py-2 rounded-lg bg-accent hover:bg-accent-hover text-white disabled:opacity-50"
+          >
+            {exportLoading ? '…' : 'Выгрузить'}
+          </button>
+        </div>
+        {exportMessage && (
+          <p className={`mt-2 text-sm ${exportMessage.startsWith('Выгружено') ? 'text-emerald-400' : 'text-red-400'}`}>
+            {exportMessage}
+          </p>
+        )}
+      </section>
+
+      <section className="bg-surface-700 rounded-xl border border-surface-500 p-5">
+        <h2 className="text-lg font-semibold text-white mb-4">Выгрузки</h2>
+        {exports.length === 0 ? (
+          <p className="text-zinc-500 text-sm">Нет выгрузок. Выгрузите группу выше.</p>
+        ) : (
+          <ul className="space-y-2">
+            {exports.map((e) => (
+              <li key={e.id} className="flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setSelectedExportId(selectedExportId === e.id ? null : e.id)}
+                  className={`px-3 py-1.5 rounded-lg text-left text-sm ${selectedExportId === e.id ? 'bg-accent text-white' : 'bg-surface-600 text-zinc-300 hover:bg-surface-500'}`}
+                >
+                  {e.groupId} — {e.count} уч. ({new Date(e.exportedAt).toLocaleString('ru')})
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        {conversion && (
+          <div className="mt-4 p-4 rounded-lg bg-surface-800 border border-surface-500 text-sm">
+            <h3 className="text-zinc-400 mb-2">Конверсия по выбранной выгрузке</h3>
+            <p className="text-white">
+              В выгрузке: <strong>{conversion.totalInExport}</strong> участников. Из них лайкнуто: <strong className="text-emerald-400">{conversion.likedFromExport}</strong>
+              {conversion.totalInExport > 0 && (
+                <span className="text-zinc-400 ml-1">
+                  ({((100 * conversion.likedFromExport) / conversion.totalInExport).toFixed(1)}%)
+                </span>
+              )}
+            </p>
+            <p className="text-zinc-400 mt-1">Всего лайкнуто за всё время: {conversion.totalLikedEver}</p>
+          </div>
+        )}
+        {selectedExportId && (
+          <div className="mt-4 p-4 rounded-lg bg-surface-800 border border-surface-500 text-sm">
+            <h3 className="text-zinc-400 mb-2">Лайки после выгрузки → кто пришёл в группу</h3>
+            <p className="text-zinc-500 text-xs mb-2">
+              Берём тех, кого лайкнули после даты этой выгрузки, и смотрим, сколько из них сейчас в группе (текущий состав из VK).
+            </p>
+            <button
+              type="button"
+              onClick={loadAfterStats}
+              disabled={afterStatsLoading}
+              className="px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-sm disabled:opacity-50"
+            >
+              {afterStatsLoading ? '…' : 'Обновить: кто пришёл в группу'}
+            </button>
+            {afterStats && (
+              <div className="mt-3 text-white">
+                <p>Лайкнуто после выгрузки: <strong>{afterStats.likedAfterExportCount}</strong></p>
+                <p className="mt-1">В группе на сегодня: <strong>{afterStats.currentGroupCount}</strong> участников</p>
+                <p className="mt-1">
+                  Из лайкнутых после выгрузки пришли в группу: <strong className="text-emerald-400">{afterStats.cameToGroupCount}</strong>
+                  {afterStats.likedAfterExportCount > 0 && (
+                    <span className="text-zinc-400 ml-1">
+                      ({((100 * afterStats.cameToGroupCount) / afterStats.likedAfterExportCount).toFixed(1)}%)
+                    </span>
+                  )}
+                </p>
+                {afterStats.error && (
+                  <p className="mt-2 text-amber-400 text-xs">{afterStats.error}</p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </section>
+
+      <section className="bg-surface-700 rounded-xl border border-surface-500 p-5">
+        <h2 className="text-lg font-semibold text-white mb-4">Лайкнутые (навсегда)</h2>
+        <p className="text-zinc-400 text-sm mb-4">
+          Пользователи, которым успешно поставили лайк — сохраняются навсегда для конверсии.
+        </p>
+        {likedCount != null && (
+          <p className="text-zinc-300 text-sm mb-3">Всего: <strong className="text-white">{likedCount}</strong></p>
+        )}
+        {likedItems.length === 0 ? (
+          <p className="text-zinc-500 text-sm">Пока никого нет.</p>
+        ) : (
+          <div className="rounded-lg bg-surface-800 border border-surface-500 overflow-hidden overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-zinc-400 border-b border-surface-500">
+                  <th className="px-4 py-2 font-medium">ID</th>
+                  <th className="px-4 py-2 font-medium">Дата лайка</th>
+                  <th className="px-4 py-2 font-medium">Ссылка</th>
+                </tr>
+              </thead>
+              <tbody className="text-zinc-300">
+                {likedItems.map((item) => (
+                  <tr key={item.userId} className="border-b border-surface-600 last:border-0">
+                    <td className="px-4 py-2 font-mono">{item.userId}</td>
+                    <td className="px-4 py-2">{new Date(item.likedAt).toLocaleString('ru')}</td>
+                    <td className="px-4 py-2">
+                      <a
+                        href={`https://vk.com/id${item.userId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sky-400 hover:underline"
+                      >
+                        vk.com/id{item.userId}
+                      </a>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </section>
     </div>

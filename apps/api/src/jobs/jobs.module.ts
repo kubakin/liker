@@ -5,6 +5,7 @@ import { VkModule } from '../vk/vk.module';
 import { TargetsModule } from '../targets/targets.module';
 import { ApiKeysModule } from '../api-keys/api-keys.module';
 import { CaptchaModule } from '../captcha/captcha.module';
+import { LikedUserModule } from '../liked-user/liked-user.module';
 import { JobsController } from './jobs.controller';
 import { JobsService } from './jobs.service';
 
@@ -15,6 +16,7 @@ import { JobsService } from './jobs.service';
     TargetsModule,
     ApiKeysModule,
     CaptchaModule,
+    LikedUserModule,
   ],
   controllers: [JobsController],
   providers: [JobsService],
