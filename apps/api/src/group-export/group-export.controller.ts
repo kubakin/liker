@@ -49,4 +49,11 @@ export class GroupExportController {
     if (!s) return { error: 'not found' };
     return s;
   }
+
+  @Get(':id/came-from-likes')
+  async cameFromLikes(@Param('id') id: string) {
+    const list = await this.groupExport.getCameFromLikesList(id);
+    if (list === null) return { error: 'not found' };
+    return list;
+  }
 }

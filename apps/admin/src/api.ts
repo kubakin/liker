@@ -107,6 +107,8 @@ export const api = {
         cameToGroupCount: number;
         error?: string;
       }>(`/group-export/${id}/after-stats`),
+    cameFromLikes: (id: string) =>
+      request<{ userIds: number[]; count: number }>(`/group-export/${id}/came-from-likes`),
   },
   likedUsers: {
     count: () => request<{ count: number }>(`/liked-users/count`),

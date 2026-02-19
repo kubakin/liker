@@ -768,6 +768,8 @@ function ConversionPanel() {
     error?: string;
   } | null>(null);
   const [afterStatsLoading, setAfterStatsLoading] = useState(false);
+  const [cameFromLikesList, setCameFromLikesList] = useState<number[] | null>(null);
+  const [cameFromLikesLoading, setCameFromLikesLoading] = useState(false);
   const [likedCount, setLikedCount] = useState<number | null>(null);
   const [likedItems, setLikedItems] = useState<{ userId: number; likedAt: number }[]>([]);
 
@@ -809,9 +811,11 @@ function ConversionPanel() {
     if (!selectedExportId) {
       setConversion(null);
       setAfterStats(null);
+      setCameFromLikesList(null);
       return;
     }
     setAfterStats(null);
+    setCameFromLikesList(null);
     api.groupExport
       .conversion(selectedExportId)
       .then((res: { exportId?: string; error?: string }) => {
@@ -845,6 +849,20 @@ function ConversionPanel() {
       setAfterStats(null);
     } finally {
       setAfterStatsLoading(false);
+    }
+  };
+
+  const loadCameFromLikesList = async () => {
+    if (!selectedExportId) return;
+    setCameFromLikesLoading(true);
+    setCameFromLikesList(null);
+    try {
+      const res = await api.groupExport.cameFromLikes(selectedExportId);
+      setCameFromLikesList(res.userIds ?? []);
+    } catch {
+      setCameFromLikesList([]);
+    } finally {
+      setCameFromLikesLoading(false);
     }
   };
 
@@ -941,6 +959,48 @@ function ConversionPanel() {
                 )}
               </div>
             )}
+            <div className="mt-3">
+              <button
+                type="button"
+                onClick={loadCameFromLikesList}
+                disabled={cameFromLikesLoading}
+                className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm disabled:opacity-50"
+              >
+                {cameFromLikesLoading ? '…' : 'Показать список пришедших от лайков'}
+              </button>
+              {cameFromLikesList && (
+                <div className="mt-3 rounded-lg bg-surface-800 border border-surface-500 overflow-hidden overflow-x-auto max-h-96">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-zinc-400 border-b border-surface-500">
+                        <th className="px-4 py-2 font-medium">ID</th>
+                        <th className="px-4 py-2 font-medium">Ссылка</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-zinc-300">
+                      {cameFromLikesList.map((userId) => (
+                        <tr key={userId} className="border-b border-surface-600 last:border-0">
+                          <td className="px-4 py-2 font-mono">{userId}</td>
+                          <td className="px-4 py-2">
+                            <a
+                              href={`https://vk.com/id${userId}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-sky-400 hover:underline"
+                            >
+                              vk.com/id{userId}
+                            </a>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <p className="px-4 py-2 text-zinc-500 text-xs border-t border-surface-500">
+                    Всего: {cameFromLikesList.length}
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
         )}
       </section>

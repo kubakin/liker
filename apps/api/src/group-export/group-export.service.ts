@@ -194,4 +194,24 @@ export class GroupExportService {
       cameToGroupCount,
     };
   }
+
+  /** Список ID пользователей: лайкнуты после выгрузки и сейчас в группе (пришли от лайков). */
+  async getCameFromLikesList(exportId: string): Promise<{ userIds: number[]; count: number } | null> {
+    const exp = await this.exportRepo.findOne({ where: { id: exportId } });
+    if (!exp) return null;
+    const exportedAt = Number(exp.exportedAt);
+    const likedRows = await this.likedRepo
+      .createQueryBuilder('l')
+      .select('l.userId')
+      .where('l.likedAt > :after', { after: String(exportedAt) })
+      .getMany();
+    const likedAfterExportIds = new Set(likedRows.map((r) => parseInt(r.userId, 10)));
+    const tokenRecord = await this.apiKeys.getNextAvailableToken();
+    if (!tokenRecord) return { userIds: [], count: 0 };
+    const res = await this.vk.groupsGetAllMembers(tokenRecord.token, exp.groupId);
+    if (!res.ok) return { userIds: [], count: 0 };
+    const currentMemberIds = new Set(res.data.items ?? []);
+    const userIds = [...likedAfterExportIds].filter((uid) => currentMemberIds.has(uid)).sort((a, b) => a - b);
+    return { userIds, count: userIds.length };
+  }
 }
